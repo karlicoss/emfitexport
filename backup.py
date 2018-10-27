@@ -3,7 +3,7 @@
 import io, re, requests, sys, time
 import json
 from kython import json_dump_pretty
-from os import listdir
+from os import listdir, rename
 from os.path import join, lexists
 
 TOKEN = "$2y$10$REMOVED."
@@ -25,7 +25,7 @@ def get_presences(device):
     r = get("/v4/presence/{0}/latest".format(device))
     presences = [presence["id"] for presence in r.json()["navigation_data"] ]
     # mm, date is returned in funny format, without year
-    return presences
+    return set(presences)
 
 def download_presence(device, pres):
     logger = get_logger()
@@ -53,6 +53,14 @@ def merge(records):
         merged.append(record[1])
     return merged
 
+def get_existing():
+    res = set() 
+    for p in listdir(BPATH):
+        if p.endswith('.json'):
+            res.add(p[:-len('.json')])
+    return res
+
+
 def backup():
     errors = False
 
@@ -73,6 +81,18 @@ def backup():
         logger.info(f"Downloaded {presence}, saving")
         with open(ppath, 'w') as fo:
             json_dump_pretty(fo, js)
+
+    existing = get_existing()
+    # next, clean up turds
+    diff = existing.difference(presences)
+    if len(diff) > 5: # kind arbitrary
+        raise RuntimeError(f'Too many differences {diff}')
+
+    for d in diff:
+        logger.info(f"Archiving turd {d}")
+        OLD = join(BPATH, d + ".json")
+        NEW = join(BPATH, d + ".json.old")
+        rename(OLD, NEW)
 
     if errors:
         sys.exit(1)
