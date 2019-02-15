@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-
 import io, re, requests, sys, time
 import json
-from kython import json_dump_pretty
+import logging
 from os import listdir, rename
 from os.path import join, lexists
 
+from kython import setup_logzero
+
+import backoff # type: ignore
+
+# TODO secrets!!
 TOKEN = "$2y$10$REMOVED."
 BPATH = '/L/backups/emfit/'
 
 def get_logger():
-    import logging
-    logger = logging.getLogger('emfit-backup')
-    return logger
+    return logging.getLogger('emfit-backup')
 
+class NoKey(Exception):
+    pass
 
+@backoff.on_exception(backoff.expo, NoKey, max_time=60 * 30)
 def get_device():
     r = get("/api/v1/user/get")
-    device = r.json()["user"]["devices"]
-    return device
+    u = r.json().get('user', None)
+    if u is None: # sometimes it happens for no good reason...
+        raise NoKey
+    return u['devices']
 
 def get_presences(device):
     # TODO eh,is that all of them??
@@ -80,12 +87,12 @@ def backup():
 
         logger.info(f"Downloaded {presence}, saving")
         with open(ppath, 'w') as fo:
-            json_dump_pretty(fo, js)
+            json.dump(js, fo, ensure_ascii=False, indent=2, sort_keys=True)
 
     existing = get_existing()
     # next, clean up turds
     diff = existing.difference(presences)
-    if len(diff) > 5: # kind arbitrary
+    if len(diff) > 5: # kinda arbitrary
         raise RuntimeError(f'Too many differences {diff}')
 
     for d in diff:
@@ -98,11 +105,12 @@ def backup():
         sys.exit(1)
 
 def main():
+    import urllib3 # type: ignore
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    setup_logzero(get_logger(), level=logging.INFO)
+    setup_logzero(logging.getLogger('backoff'), level=logging.DEBUG)
     backup()
 
 if __name__ == '__main__':
-    import logging
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    logging.basicConfig(level=logging.INFO)
     main()
