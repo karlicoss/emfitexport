@@ -5,12 +5,12 @@ import logging
 from os import listdir, rename
 from os.path import join, lexists
 
+from emfit_secrets import TOKEN # type: ignore
+
 from kython import setup_logzero
 
 import backoff # type: ignore
 
-# TODO secrets!!
-TOKEN = "$2y$10$REMOVED."
 BPATH = '/L/backups/emfit/'
 
 def get_logger():
@@ -22,8 +22,11 @@ class NoKey(Exception):
 @backoff.on_exception(backoff.expo, NoKey, max_time=60 * 30)
 def get_device():
     r = get("/api/v1/user/get")
-    u = r.json().get('user', None)
-    if u is None: # sometimes it happens for no good reason...
+    jj = r.json()
+    u = jj.get('user', None)
+    if u is None:
+        # sometimes it just happens for no good reason...
+        get_logger().error(f'"no user" error: {jj}')
         raise NoKey
     return u['devices']
 
