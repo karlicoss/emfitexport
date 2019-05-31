@@ -30,10 +30,15 @@ def get_device():
         raise NoKey
     return u['devices']
 
+@backoff.on_exception(backoff.expo, NoKey, max_time=60 * 30)
 def get_presences(device):
     # TODO eh,is that all of them??
     r = get("/v4/presence/{0}/latest".format(device))
-    presences = [presence["id"] for presence in r.json()["navigation_data"] ]
+    jj = r.json()
+    nd = jj.get('navigation_data', None)
+    if nd is None:
+        raise NoKey
+    presences = [presence["id"] for presence in nd]
     # mm, date is returned in funny format, without year
     return set(presences)
 
