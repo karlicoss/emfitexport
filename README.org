@@ -1,0 +1,47 @@
+Export your personal [[https://www.emfit.com/active-life-sleep-and-recovery][Emfit QS]] sleep data.
+
+* Setting up
+1. Clone *recursively*: =git clone --recursive https://github.com/karlicoss/emfitexport=
+2. =pip3 install --user -r requirements.txt=
+3. Log in to your [[https://qs.emfit.com][Emfit dashboard]] and extract the =Authorisation= header using browser's devtools.
+
+   It should look like =Bearer SOME_LONG_STRING=.
+
+   If you don't know how to do it, [[https://willschenk.com/articles/2019/reverse_engineering_apis_using_chrome][here]] is a nice tutorial.
+
+# TODO setup.py?
+# TODO really need a way to install dependencies only... or maybe it's fair that setup.py reads requirements.txt, dunno
+
+* Exporting
+
+#+begin_src python :dir src :results drawer :exports results
+import emfitexport.export as E; return E.make_parser().epilog
+#+end_src
+
+#+RESULTS:
+:results:
+
+Usage:
+
+*Recommended*: create =secrets.py= keeping your api parameters, e.g.:
+
+
+: authorization = "AUTHORIZATION"
+
+
+After that, use:
+
+: ./export.py --secrets /path/to/secrets.py
+
+That way you type less and have control over where you keep your plaintext secrets.
+
+*Alternatively*, you can pass parameters directly, e.g.
+
+: ./export.py --authorization <authorization>
+
+However, this is verbose and prone to leaking your keys/tokens/passwords in shell history.
+
+
+I *highly* recommend checking exported files at least once just to make sure they contain everything you expect from your export. If not, please feel free to ask or raise an issue!
+
+:end:

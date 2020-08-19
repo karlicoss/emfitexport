@@ -1,3 +1,3 @@
-backoff
 requests
-git+https://github.com/karlicoss/kython.git
+tenacity # for retries
+# TODO setup.py??
