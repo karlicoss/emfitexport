@@ -20,50 +20,59 @@ def _hhmm(minutes) -> str:
 
 #
 # def important on the sleep plot to have consistent local time
+# todo hmm, emfit has time_user_gmt_offset?? how it is determined?
 def fromts(ts) -> datetime:
     dt = datetime.fromtimestamp(ts, tz=pytz.utc)
     return dt
 
+
+# todo tossnturn_count, tossnturn_datapoints (array of timestamps)
+# todo use sleep class percents?
 
 cproperty = property # todo?
 AWAKE = 4
 
 # todo use multiple threads for that?
 class EmfitParse:
-    def __init__(self, sid: str, jj: Json) -> None:
+    def __init__(self, sid: str, raw: Json) -> None:
         self.sid = sid
-        self.jj = jj
+        self.raw = raw
 
     # TODO what was that for???
     def __hash__(self):
         return hash(self.sid)
 
     @property
+    def measured_rr_avg(self) -> float:
+        # todo "measured_rr_max", "measured_rr_min"
+        return self.raw['measured_rr_avg']
+
+    @property
     def hrv_morning(self) -> float:
-        return self.jj['hrv_rmssd_morning']
+        return self.raw['hrv_rmssd_morning']
 
     @property
     def hrv_evening(self) -> float:
-        return self.jj['hrv_rmssd_evening']
+        return self.raw['hrv_rmssd_evening']
 
     @property
     def start(self) -> datetime:
         """
         Bed enter time, not necessarily sleep start
         """
-        return fromts(self.jj['time_start'])
+        return fromts(self.raw['time_start'])
 
     @property
     def end(self) -> datetime:
         """
         Bed exit time, not necessarily sleep end
         """
-        return fromts(self.jj['time_end'])
+        return fromts(self.raw['time_end'])
 
     @property
     def epochs(self):
         # pairs of timestamp/epoch 'id'
-        return self.jj['sleep_epoch_datapoints']
+        return self.raw['sleep_epoch_datapoints']
 
     @property
     def epoch_series(self):
@@ -94,15 +103,15 @@ class EmfitParse:
     # ok, so I need time_asleep
     @property
     def sleep_minutes_emfit(self) -> float:
-        return self.jj['sleep_duration'] // 60
+        return self.raw['sleep_duration'] // 60
 
     @property
     def hrv_lf(self) -> float:
-        return self.jj['hrv_lf']
+        return self.raw['hrv_lf']
 
     @property
     def hrv_hf(self) -> float:
-        return self.jj['hrv_hf']
+        return self.raw['hrv_hf']
 
     @property
     def strip_awakes(self):
@@ -168,7 +177,7 @@ class EmfitParse:
 # [[timestamp, pulse, breath?, ??? hrv?]] # every 4 seconds?
 
     def iter_points(self):
-        for ll in self.jj['measured_datapoints']:
+        for ll in self.raw['measured_datapoints']:
             [ts, pulse, br, activity] = ll
             # TODO what the fuck is whaat?? It can't be HRV, it's about 500 ms on average
             # act in csv.. so it must be activity? wonder how is it measured.
@@ -194,7 +203,7 @@ class EmfitParse:
     def hrv(self):
         tss = []
         res = []
-        for ll in self.jj['hrv_rmssd_datapoints']:
+        for ll in self.raw['hrv_rmssd_datapoints']:
             [ts, rmssd, _, _, almost_always_zero, _] = ll
             # timestamp,rmssd,tp,lfn,hfn,r_hrv
             # TP is total_power??
@@ -210,7 +219,7 @@ class EmfitParse:
 
     @property
     def measured_hr_avg(self) -> float:
-        return self.jj['measured_hr_avg']
+        return self.raw['measured_hr_avg']
 
     @cproperty
     def sleep_hr_coverage(self) -> float:
@@ -239,6 +248,12 @@ class Emfit:
     sleep_minutes_emfit: int
     hrv_lf: float
     hrv_hf: float
+    measured_rr_avg: float
+
+    @property
+    def respiratory_rate_avg(self) -> float:
+        # todo not sure about aliases? measured_rr is very cryptic.. on the other hand nice to be consistent with the raw field names?
+        return self.measured_rr_avg
 
     @property
     # ok, I guess that's reasonable way of defining sleep date
@@ -281,9 +296,9 @@ recovery: {self.recovery:3.0f}
 
 def sleeps(path: Path) -> Iterator[Res[Emfit]]:
     # NOTE: ids seems to be consistent with ascending date order
-    for f in sorted(path.glob('*.json')):
+    for f in list(sorted(path.glob('*.json'))):
         sid = f.stem
-        em = EmfitParse(sid=sid, jj=json.loads(f.read_text()))
+        em = EmfitParse(sid=sid, raw=json.loads(f.read_text()))
         yield from Emfit.make(em)
         # todo assert sorted??
 
