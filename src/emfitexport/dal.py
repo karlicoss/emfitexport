@@ -19,7 +19,6 @@ def _hhmm(minutes) -> str:
 
 
 #
-# FIXME might need to adjust tz in mypkg?
 # def important on the sleep plot to have consistent local time
 def fromts(ts) -> datetime:
     dt = datetime.fromtimestamp(ts, tz=pytz.utc)
@@ -290,7 +289,6 @@ def sleeps(path: Path) -> Iterator[Res[Emfit]]:
 
 
 def main():
-    # TODO FIXME
     for x in sleeps(Path('/tmp/emfit')):
         print(x)
 

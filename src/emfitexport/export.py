@@ -173,3 +173,12 @@ def make_parser():
 
 if __name__ == '__main__':
     main()
+
+# todo add username/password login? Seems that the token might expire now and then
+
+# 1. go here https://qs.emfit.com/#/login
+# 2. tick: <div id="check-agree"><div class="icheckbox_square-orange checked" style="position: relative;"><input ng-icheck="" type="checkbox" id="checkbox" class="round icheck ng-untouched ng-valid ng-dirty ng-valid-parse" ng-model="Auth.loginUser.terms" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255) none repeat scroll 0% 0%; border: 0px none; opacity: 0;"></ins></div></div>
+# 3. <input id="username">
+# 4. <input id="password">
+# 5. <button id="submit">
+# todo not sure what's the best way to get the auth header??
