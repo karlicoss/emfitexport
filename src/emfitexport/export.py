@@ -33,18 +33,16 @@ from .exporthelpers.export_helper import Json, setup_logger
 
 
 class Exporter:
-    def __init__(self, authorization: str, export_dir: Path) -> None:
+    def __init__(self, token: str, export_dir: Path) -> None:
         self.logger = get_logger()
-        # todo not sure if really necessary
-        assert authorization.startswith('Bearer '), authorization
-        self.authorization = authorization
+        self.token = token
         self.export_dir = export_dir
 
 
     def api(self, path: str, base=QS_API, **kwargs):
         r = requests.get(
             base + path,
-            headers={'Authorization': self.authorization},
+            headers={'Authorization': f'Bearer {self.token}'},
             **kwargs,
         )
         r.raise_for_status()
@@ -53,8 +51,6 @@ class Exporter:
 
     @retryme
     def fetch_device_id(self) -> str:
-        # TODO ugh it's a mess
-        # in browser, it uses https://qs-api.emfit.com/api/v1/user and bearer: in Authorisation field??
         r = self.api('/api/v1/user/get')
         jj = r.json()
         u = jj.get('user', None)
@@ -145,6 +141,15 @@ class Exporter:
             sys.exit(1)
 
 
+Token = str
+def login(username: str, password: str) -> Token:
+    res = requests.post(
+        'https://qs-api.emfit.com/api/v1/login',
+        data=dict(username=username, password=password),
+    )
+    return res.json()['token']
+
+
 def main():
     setup_logger(get_logger(), level='INFO')
     # todo tenacity logging?
@@ -152,8 +157,14 @@ def main():
     args = parser.parse_args()
 
     params = args.params
+
+    token = login(
+        username=params['username'],
+        password=params['password'],
+    )
+
     ex = Exporter(
-        authorization=params['authorization'],
+        token=token,
         export_dir=args.export_dir,
     )
     ex.run()
@@ -162,10 +173,9 @@ def main():
 def make_parser():
     from .exporthelpers.export_helper import setup_parser, Parser
     p = Parser('Export/takeout for your personal Emfit QS sleep data')
-    # TODO add docs on token?
     setup_parser(
         parser=p,
-        params=['authorization'],
+        params=['username', 'password'],
     )
     p.add_argument('--export-dir', type=Path, required=True, help='Output directory for JSON sleep sessions')
     return p
@@ -173,12 +183,3 @@ def make_parser():
 
 if __name__ == '__main__':
     main()
-
-# todo add username/password login? Seems that the token might expire now and then
-
-# 1. go here https://qs.emfit.com/#/login
-# 2. tick: <div id="check-agree"><div class="icheckbox_square-orange checked" style="position: relative;"><input ng-icheck="" type="checkbox" id="checkbox" class="round icheck ng-untouched ng-valid ng-dirty ng-valid-parse" ng-model="Auth.loginUser.terms" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255) none repeat scroll 0% 0%; border: 0px none; opacity: 0;"></ins></div></div>
-# 3. <input id="username">
-# 4. <input id="password">
-# 5. <button id="submit">
-# todo not sure what's the best way to get the auth header??
