@@ -48,6 +48,7 @@ class EmfitParse:
         # todo "measured_rr_max", "measured_rr_min"
         return self.raw['measured_rr_avg']
 
+    # todo derive from hrv datapoints?
     @property
     def hrv_morning(self) -> float:
         return self.raw['hrv_rmssd_morning']
@@ -308,6 +309,15 @@ class FakeData:
         import numpy as np # type: ignore
         self.gen = np.random.default_rng(seed=self.seed)
         self.id = 0
+
+
+        # hr is sort of a random walk?? probably not very accurate, but whatever
+        # also keep within certain boundaries?
+        self.cur_avg_hr  = 60.0
+        self.rr_avg      = 13.0
+        self.hrv_morning = 45.0
+        self.hrv_evening = 55.0
+
         # todo would be nice to separate parameters and the state
         self.frequency = timedelta(seconds=30) # NOTE: it better be aligned to minute boundaries..
         self.device_id = '1234'
@@ -328,12 +338,13 @@ class FakeData:
         # mark fields I didn't bother filling for now
         # F = Field('en')
         todo = None
+        G = self.gen
 
         def make_sleep():
             D = timedelta
             def ntd(mean, sigma):
                 # 'normal' timedelta minutes
-                val = self.gen.normal(mean, sigma)
+                val = G.normal(mean, sigma)
                 val = max(0, val)
                 return D(minutes=int(val))
 
@@ -376,20 +387,21 @@ class FakeData:
                     todo,
                     todo
                 ) for ts in tss],
-                "hrv_rmssd_evening"         : todo,
-                "hrv_rmssd_morning"         : todo,
+                "hrv_rmssd_evening"         : self.hrv_evening,
+                "hrv_rmssd_morning"         : self.hrv_morning,
                 "id"                        : f'{self.id:06}',
                 "measured_activity_avg"     : todo,
                 "measured_datapoints"       : [(
                     ts,
-                    self.gen.normal(60, 5), # TODO vary it throughout the night & have a global trend
-                    self.gen.normal(12, 2),
+                    G.normal(60, 5), # TODO vary it throughout the night & have a global trend
+                    G.normal(12, 2),
                     todo, # activity??
                 ) for ts in tss],
-                "measured_hr_avg"           : todo,
+                "measured_hr_avg"           : self.cur_avg_hr, # todo simulate nightly HR via this
                 "measured_hr_max"           : todo,
                 "measured_hr_min"           : todo,
-                "measured_rr_avg"           : todo,
+                # todo this should also be inferred instead from raw data
+                "measured_rr_avg"           : self.rr_avg,
                 "measured_rr_max"           : todo,
                 "measured_rr_min"           : todo,
                 "nodata_periods"            : todo,
@@ -426,6 +438,10 @@ class FakeData:
             }
 
         j = make_sleep()
+        self.hrv_morning += G.normal(0, 0.9)
+        self.hrv_evening += G.normal(0, 0.9)
+        self.cur_avg_hr  += G.normal(0, 0.5)
+        self.rr_avg      += G.normal(0, 0.1)
         self.id += 1
         return j
 
