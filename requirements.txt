@@ -1,3 +1,0 @@
-requests
-tenacity # for retries
-# TODO setup.py??

@@ -1,15 +1,13 @@
-# see https://github.com/karlicoss/pymplate for up-to-date reference
-
-
 from setuptools import setup, find_packages # type: ignore
 
 
 def main():
     pkg = 'emfitexport'
-    setup(
+    pkgs = find_packages('src')
+    return setup(
         name=pkg,
         zip_safe=False,
-        packages=[pkg],
+        packages=pkgs,
         package_dir={'': 'src'},
         package_data={pkg: ['py.typed']},
 
@@ -17,13 +15,18 @@ def main():
         author='',
         author_email='',
         description='',
+
+        install_requires=[
+            'pytz',
+            'requests',
+            'tenacity', # for retries
+        ],
+        extras_require={
+            'testing': ['pytest'],
+            'linting': ['pytest', 'mypy'],
+        },
     )
 
 
 if __name__ == '__main__':
     main()
-
-# TODO
-# from setuptools_scm import get_version
-# https://github.com/pypa/setuptools_scm#default-versioning-scheme
-# get_version(version_scheme='python-simplified-semver', local_scheme='no-local-version')
