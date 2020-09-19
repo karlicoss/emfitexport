@@ -22,7 +22,7 @@ def main():
             'tenacity', # for retries
         ],
         extras_require={
-            'testing': ['pytest'],
+            'testing': ['pytest', 'numpy'],
             'linting': ['pytest', 'mypy'],
         },
     )
