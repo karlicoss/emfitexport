@@ -78,11 +78,19 @@ class Exporter:
     def fetch_sleep(self, device: str, sleep_id: str) -> Json:
         # NOTE: for some reason, sleep session is called 'presence' in emfit
         js = self.api(f'/api/v1/presence/{device}/{sleep_id}').json()
-        if 'id' not in js:
+        # todo don't remember if this happened often?
+        sid = js.get('id', None)
+        if sid is None:
             self.logger.warning(f'Bad json: {js}')
             raise RetryMe
-        else:
-            return js
+
+        # todo use some direct way to check?
+        datapoints = js['sleep_epoch_datapoints']
+        if datapoints is None:
+            self.logger.warning('Sleep session %s has no datapoints, likely incomplete sleep. Running the export later should resolve this.', sid)
+            raise RetryMe
+
+        return js
 
 
     def load_existing(self) -> List[str]:

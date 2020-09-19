@@ -283,12 +283,6 @@ class Emfit:
         })
 
 
-# TODO FIXME handle this? not sure how common
-# if em.epochs is None:
-#     # TODO yield errors??
-#     log.error('%s (on %s) got None in epochs! ignoring', em.sid, em.end)
-#     return
-
 def sleeps(path: Path) -> Iterator[Res[Emfit]]:
     # NOTE: ids seems to be consistent with ascending date order
     for f in list(sorted(path.glob('*.json'))):
@@ -297,8 +291,7 @@ def sleeps(path: Path) -> Iterator[Res[Emfit]]:
             e = Emfit.from_json(j)
             yield e
         except Exception as ex:
-            raise ex
-            # yield ex
+            yield ex
 
 
 ### end of main DAL, rest is test & supplementary code
