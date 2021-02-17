@@ -82,15 +82,3 @@ def process():
     # f = list(sorted(d.glob('*.htm')))[1000]
     # todo catch exceptions
     # todo always save htmls? for now manual cleanup?
-
-# TODO capture every second -- how to ensure proper timeout??
-# how to ensure it's every second indeed? asyncio?
-
-# import click
-# @click.command()
-# # @click.option('--module', required=True, help='Bleanser module to run')
-# def main() -> None:
-#     pass
-
-# if __name__ == '__main__':
-#     main()
