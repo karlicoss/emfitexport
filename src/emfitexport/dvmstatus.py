@@ -2,16 +2,16 @@
 # Captures dvmstatus Emfit page
 # TODO: see  https://gist.github.com/karlicoss/3361f6a239048a451daa2a02982ee180#dvmstatushtm
 # for actual parsing
-
 from datetime import datetime
 from pathlib import Path
-import time
-from typing import Dict, Any
 import sys
-
-import pytz
-
+import sqlite3
+import time
 import urllib.request
+
+import click
+
+
 def grab(ip: str) -> str:
     url = ip + '/dvmstatus.htm'
     try:
@@ -20,7 +20,6 @@ def grab(ip: str) -> str:
         return str(e)
 
 
-import sqlite3
 def capture(*, ip: str, to: Path) -> None:
     with sqlite3.connect(str(to)) as db:
         # todo not sure if need id?
@@ -86,7 +85,6 @@ def _install_systemd(*, name: str, out: Path, launcher: str, largs: List[str]) -
 ###
 
 
-import click
 @click.command()
 @click.option('--ip', type=str, required=True)
 @click.option('--to', type=Path, required=True)

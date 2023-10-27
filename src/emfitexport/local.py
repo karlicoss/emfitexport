@@ -66,8 +66,7 @@ def parse_page(html: str) -> Stats:
 
 
 from pathlib import Path
-def process():
-    d: Path
+def process(d: Path):
     for x in sorted(d.glob('*.htm')):
         html = x.read_text()
         try:
