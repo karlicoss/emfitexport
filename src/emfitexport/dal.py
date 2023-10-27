@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
+from concurrent.futures import Executor
 from dataclasses import dataclass
 from datetime import date as datetime_date, datetime, timedelta, timezone
 import json
 from pathlib import Path
-from typing import Iterator, List, Tuple
+from typing import Iterator, List, Optional, Tuple
 
 from .exporthelpers.dal_helper import Res, Json, datetime_aware
 from .exporthelpers.logging_helper import make_logger
+from .utils import DummyFuture
 
 
 logger = make_logger(__name__)
@@ -80,14 +82,14 @@ class EmfitParse:
     def epoch_series(self) -> Tuple[List[int], List[int]]:
         tss = []
         eps = []
-        for [ts, e] in self.epochs:
+        for (ts, e) in self.epochs:
             tss.append(ts)
             eps.append(e)
         return tss, eps
 
     @property
     def sleep_start(self) -> datetime_aware:
-        for [ts, e] in self.epochs:
+        for (ts, e) in self.epochs:
             if e == AWAKE:
                 continue
             return fromts(ts)
@@ -95,7 +97,7 @@ class EmfitParse:
 
     @property
     def sleep_end(self) -> datetime_aware:
-        for [ts, e] in reversed(self.epochs):
+        for (ts, e) in reversed(self.epochs):
             if e == AWAKE:
                 continue
             return fromts(ts)
@@ -280,18 +282,44 @@ class Emfit:
         return cls(**{k: getattr(em, k) for k in Emfit.__annotations__})
 
 
-def sleeps(path: Path) -> Iterator[Res[Emfit]]:
-    assert path.exists(), path  # ugh glob will just return empty sequence if dir doesn't exist
-    # NOTE: ids seems to be consistent with ascending date order
-    paths = sorted(path.glob('*.json'))
-    for i, f in enumerate(paths):
-        logger.info(f'processing {f} ({i}/{len(paths)})')
-        try:
-            j = json.loads(f.read_text())
-            e = Emfit.from_json(j)
-            yield e
-        except Exception as ex:
-            yield ex
+def _process_one(json_path: Path, i: int, total: int) -> Res[Emfit]:
+    logger.info(f'processing {json_path} ({i}/{total})')
+    try:
+        j = json.loads(json_path.read_text())
+        return Emfit.from_json(j)
+    except Exception as ex:
+        return ex
+
+
+class DAL:
+    def __init__(self, export_path: Path, *, cpu_pool: Optional[Executor] = None) -> None:
+        self.export_path = export_path
+        self.cpu_pool = cpu_pool
+
+    def sleeps(self) -> Iterator[Res[Emfit]]:
+        assert self.export_path.exists(), self.export_path  # ugh glob will just return empty sequence if dir doesn't exist
+
+        # NOTE: ids seems to be consistent with ascending date order
+        paths = sorted(self.export_path.glob('*.json'))
+
+        cpu_pool = self.cpu_pool
+
+        futures = []
+        for i, f in enumerate(paths):
+            if cpu_pool is not None:
+                future = cpu_pool.submit(_process_one, f, i, len(paths))
+            else:
+                future = DummyFuture(_process_one, f, i, len(paths))
+            futures.append(future)
+
+        for fut in futures:
+            fres = fut.result()
+            yield fres
+
+
+# legacy function, used to be called from HPI. keeping for bwd compatibility
+def sleeps(path: Path, *, cpu_pool: Optional[Executor] = None) -> Iterator[Res[Emfit]]:
+    return DAL(export_path=path, cpu_pool=cpu_pool).sleeps()
 
 
 ### end of main DAL, rest is test & supplementary code
