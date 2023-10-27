@@ -1,0 +1,55 @@
+# see https://github.com/karlicoss/pymplate for up-to-date reference
+[project]
+dynamic = ["version"]  # version is managed by setuptools_scm
+name = "emfitexport"
+dependencies = [
+    "requests",
+    "tenacity",  # for retrying
+]
+# TODO maybe split out DAL deps and export deps? might be nice
+
+## these need to be set if you're planning to upload to pypi
+# description = "TODO"
+# license = {file = "LICENSE"}
+# authors = [
+#     {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
+# ]
+# maintainers = [
+#     {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
+# ]
+#
+# [project.urls]
+# Homepage = "https://github.com/karlicoss/pymplate"
+##
+
+[project.optional-dependencies]
+dal = []
+export = [
+    "requests",
+    "tenacity",  # for retrying
+]
+optional = [
+    "orjson",  # faster json processing
+    "colorlog",
+    "ijson",  # faster iterative json processing
+    "click",  # for dvmstatus
+    "numpy",  # for fake data generation
+]
+testing = [
+    "pytest",
+    "ruff",
+    "mypy",
+    "lxml",  # for mypy html coverage
+
+    "click",  # ugh, test discovery tries to import dvmstatus
+    "numpy",
+]
+
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_scheme = "python-simplified-semver"
+local_scheme = "dirty-tag"

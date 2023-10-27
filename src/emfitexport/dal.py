@@ -1,36 +1,35 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date as datetime_date, datetime, timedelta, timezone
 import json
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, List, Tuple
 
-import pytz
-
-
-from .exporthelpers.dal_helper import Res, Json, logger
+from .exporthelpers.dal_helper import Res, Json, datetime_aware
+from .exporthelpers.logging_helper import make_logger
 
 
-log = logger(__name__)
+logger = make_logger(__name__)
+log = logger  # legacy name, was used at HPI at some point, so keeping for backwards compat
 
 
 def _hhmm(minutes) -> str:
     return '{:02d}:{:02d}'.format(*divmod(minutes, 60))
 
 
-#
 # def important on the sleep plot to have consistent local time
 # todo hmm, emfit has time_user_gmt_offset?? how it is determined?
-def fromts(ts) -> datetime:
-    dt = datetime.fromtimestamp(ts, tz=pytz.utc)
+# seems that datapoints are in UTC though
+def fromts(ts) -> datetime_aware:
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
     return dt
 
 
 # todo tossnturn_count, tossnturn_datapoints (array of timestamps)
 # todo use sleep class percents?
 
-cproperty = property # todo?
 AWAKE = 4
+
 
 # todo use multiple threads for that?
 class EmfitParse:
@@ -58,26 +57,27 @@ class EmfitParse:
         return self.raw['hrv_rmssd_evening']
 
     @property
-    def start(self) -> datetime:
+    def start(self) -> datetime_aware:
         """
         Bed enter time, not necessarily sleep start
         """
         return fromts(self.raw['time_start'])
 
     @property
-    def end(self) -> datetime:
+    def end(self) -> datetime_aware:
         """
         Bed exit time, not necessarily sleep end
         """
         return fromts(self.raw['time_end'])
 
     @property
-    def epochs(self):
+    def epochs(self) -> List[Tuple[int, int]]:
         # pairs of timestamp/epoch 'id'
+        # these seems to be utc (can double check last epoch against to_utc field in export)
         return self.raw['sleep_epoch_datapoints']
 
     @property
-    def epoch_series(self):
+    def epoch_series(self) -> Tuple[List[int], List[int]]:
         tss = []
         eps = []
         for [ts, e] in self.epochs:
@@ -85,16 +85,16 @@ class EmfitParse:
             eps.append(e)
         return tss, eps
 
-    @cproperty
-    def sleep_start(self) -> datetime:
+    @property
+    def sleep_start(self) -> datetime_aware:
         for [ts, e] in self.epochs:
             if e == AWAKE:
                 continue
             return fromts(ts)
         raise RuntimeError
 
-    @cproperty
-    def sleep_end(self) -> datetime:
+    @property
+    def sleep_end(self) -> datetime_aware:
         for [ts, e] in reversed(self.epochs):
             if e == AWAKE:
                 continue
@@ -129,8 +129,7 @@ class EmfitParse:
             if e != AWAKE:
                 ll = i
                 break
-        return self.epochs[ff: ll]
-
+        return self.epochs[ff:ll]
 
     # # TODO epochs with implicit sleeps? not sure... e.g. night wakeups.
     # # I guess I could input intervals/correct data/exclude days manually?
@@ -176,8 +175,8 @@ class EmfitParse:
     def __str__(self) -> str:
         return f"from {self.sleep_start} to {self.sleep_end}"
 
-# measured_datapoints
-# [[timestamp, pulse, breath?, ??? hrv?]] # every 4 seconds?
+    # measured_datapoints
+    # [[timestamp, pulse, breath?, ??? hrv?]] # every 4 seconds?
 
     def iter_points(self):
         for ll in self.raw['measured_datapoints']:
@@ -224,7 +223,7 @@ class EmfitParse:
     def measured_hr_avg(self) -> float:
         return self.raw['measured_hr_avg']
 
-    @cproperty
+    @property
     def sleep_hr_coverage(self) -> float:
         tss, hrs = self.sleep_hr
         covered = len([h for h in hrs if h is not None])
@@ -237,15 +236,16 @@ class EmfitParse:
 
 Sid = str
 
+
 @dataclass(eq=True, frozen=True)
 class Emfit:
     sid: Sid
     hrv_morning: float
     hrv_evening: float
-    start: datetime
-    end  : datetime
-    sleep_start: datetime
-    sleep_end  : datetime
+    start: datetime_aware
+    end: datetime_aware
+    sleep_start: datetime_aware
+    sleep_end: datetime_aware
     sleep_hr_coverage: float
     measured_hr_avg: float
     sleep_minutes_emfit: int
@@ -260,10 +260,10 @@ class Emfit:
 
     @property
     # ok, I guess that's a reasonable way of defining sleep date
-    def date(self):
+    def date(self) -> datetime_date:
         return self.end.date()
 
-    @cproperty
+    @property
     def time_in_bed(self) -> int:
         return int((self.sleep_end - self.sleep_start).total_seconds()) // 60
 
@@ -277,15 +277,15 @@ class Emfit:
         em = EmfitParse(sid, raw=j)
 
         # todo meh
-        return cls(**{
-            # pylint: disable=no-member
-            k: getattr(em, k) for k in Emfit.__annotations__
-        })
+        return cls(**{k: getattr(em, k) for k in Emfit.__annotations__})
 
 
 def sleeps(path: Path) -> Iterator[Res[Emfit]]:
+    assert path.exists(), path  # ugh glob will just return empty sequence if dir doesn't exist
     # NOTE: ids seems to be consistent with ascending date order
-    for f in list(sorted(path.glob('*.json'))):
+    paths = sorted(path.glob('*.json'))
+    for i, f in enumerate(paths):
+        logger.info(f'processing {f} ({i}/{len(paths)})')
         try:
             j = json.loads(f.read_text())
             e = Emfit.from_json(j)
@@ -295,26 +295,27 @@ def sleeps(path: Path) -> Iterator[Res[Emfit]]:
 
 
 ### end of main DAL, rest is test & supplementary code
-
 class FakeData:
-    def __init__(self, seed: int=0) -> None:
+    def __init__(self, seed: int = 0) -> None:
         self.seed = seed
-        import numpy as np # type: ignore
+        import numpy as np
+
         self.gen = np.random.default_rng(seed=self.seed)
         self.id = 0
 
-
         # hr is sort of a random walk?? probably not very accurate, but whatever
         # also keep within certain boundaries?
+        # fmt: off
         self.cur_avg_hr  = 60.0
         self.rr_avg      = 13.0
         self.hrv_morning = 45.0
         self.hrv_evening = 55.0
+        # fmt: on
 
         # todo would be nice to separate parameters and the state
-        self.frequency = timedelta(seconds=30) # NOTE: it better be aligned to minute boundaries..
+        self.frequency = timedelta(seconds=30)  # NOTE: it better be aligned to minute boundaries..
         self.device_id = '1234'
-        self.tz = pytz.timezone('America/New_York')
+        self.tz = timezone(offset=timedelta(hours=-4))  # kinda new york?
         self.first_day = datetime.strptime('20100101', '%Y%m%d')
         self.avg_sleep_minutes = 7 * 60
         # todo gaussian distribution??
@@ -324,7 +325,7 @@ class FakeData:
         return self.first_day + timedelta(days=self.id)
 
     def generate(self) -> Json:
-        import numpy as np # type: ignore
+        import numpy as np
 
         # todo ok, mimesize seems pretty useless for now?
         # from mimesis.schema import Field, Schema # type: ignore
@@ -335,6 +336,7 @@ class FakeData:
 
         def make_sleep():
             D = timedelta
+
             def ntd(mean, sigma):
                 # 'normal' timedelta minutes
                 val = G.normal(mean, sigma)
@@ -343,13 +345,15 @@ class FakeData:
 
             sleep_minutes = ntd(self.avg_sleep_minutes, 60)
 
-            T = lambda d: int(d.timestamp()) # assume it's aligned by seconds for simplicity
-            bed_start = self.today + D(hours=23) # todo randomize
-            bed_end   = bed_start + sleep_minutes
-            gmt_offset = self.tz.utcoffset(self.today) / D(minutes=1) # type: ignore
-
+            T = lambda d: int(d.timestamp())  # assume it's aligned by seconds for simplicity
+            # fmt: off
+            bed_start   = self.today + D(hours=23)  # todo randomize
+            bed_end     = bed_start + sleep_minutes
             sleep_start = bed_start + ntd(30, 10)
             sleep_end   = bed_end   - ntd(20, 10)
+            # fmt: on
+
+            gmt_offset = self.tz.utcoffset(self.today) / D(minutes=1)
 
             sleep_duration = (sleep_end - sleep_start) / D(seconds=1)
 
@@ -360,6 +364,7 @@ class FakeData:
             tss = np.arange(T(bed_start), T(bed_end), self.frequency.total_seconds())
 
             arange = np.arange
+            # fmt: off
             return {
                 "bed_exit_count"            : todo,
                 "bed_exit_duration"         : todo,
@@ -374,7 +379,7 @@ class FakeData:
                 "hrv_recovery_total"        : todo,
                 "hrv_rmssd_datapoints"      : [(
                     ts,
-                    0, # TODO HRV
+                    0,  # TODO HRV
                     todo,
                     todo,
                     todo,
@@ -386,11 +391,11 @@ class FakeData:
                 "measured_activity_avg"     : todo,
                 "measured_datapoints"       : [(
                     ts,
-                    G.normal(60, 5), # TODO vary it throughout the night & have a global trend
+                    G.normal(60, 5),  # TODO vary it throughout the night & have a global trend
                     G.normal(12, 2),
                     todo, # activity??
                 ) for ts in tss],
-                "measured_hr_avg"           : self.cur_avg_hr, # todo simulate nightly HR via this
+                "measured_hr_avg"           : self.cur_avg_hr,  # todo simulate nightly HR via this
                 "measured_hr_max"           : todo,
                 "measured_hr_min"           : todo,
                 # todo this should also be inferred instead from raw data
@@ -426,24 +431,25 @@ class FakeData:
                 "time_start_gmt_offset"     : gmt_offset,
                 "time_user_gmt_offset"      : todo,
                 "to_utc"                    : todo,
-                "tossnturn_count"           : todo, # todo derive
+                "tossnturn_count"           : todo,  # todo derive
                 "tossnturn_datapoints"      : todo,
             }
+            # fmt: on
 
         j = make_sleep()
+        # fmt: off
         self.hrv_morning += G.normal(0, 0.9)
         self.hrv_evening += G.normal(0, 0.9)
         self.cur_avg_hr  += G.normal(0, 0.5)
         self.rr_avg      += G.normal(0, 0.1)
+        # fmt: on
         self.id += 1
         return j
-
 
     def fill(self, path: Path, *, count: int) -> None:
         for i in range(count):
             j = self.generate()
             (path / f'{j["id"]}.json').write_text(json.dumps(j))
-
 
 
 def test(tmp_path: Path) -> None:
@@ -456,7 +462,7 @@ def test(tmp_path: Path) -> None:
 
 
 # todo use proper dal_helper.main?
-def main():
+def main() -> None:
     for x in sleeps(Path('/tmp/emfit')):
         print(x)
 

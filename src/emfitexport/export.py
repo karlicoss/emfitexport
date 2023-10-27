@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 import json
 import logging
+import os
 from pathlib import Path
-from typing import Iterator, List, Set
-
+import sys
+from typing import Iterator, List
 
 import requests
-from tenacity import retry, retry_if_exception_type, wait_exponential, stop_after_attempt # type: ignore
+from tenacity import retry, retry_if_exception_type, wait_exponential, stop_after_attempt
+
+from .exporthelpers.export_helper import Json, setup_parser, Parser
+from .exporthelpers.logging_helper import make_logger
+
+
+logger = make_logger(__name__)
 
 
 # ugh. it's a mess https://github.com/samuelmr/emfit-qs/pull/1/files
 QS_API = 'https://qs-api.emfit.com'
 API_QS = 'https://api-qs.emfit.com'
-
-
-def get_logger():
-    return logging.getLogger('emfitexport')
 
 
 class RetryMe(Exception):
@@ -29,15 +32,10 @@ retryme = retry(
 )
 
 
-from .exporthelpers.export_helper import Json, setup_logger
-
-
 class Exporter:
     def __init__(self, token: str, export_dir: Path) -> None:
-        self.logger = get_logger()
         self.token = token
         self.export_dir = export_dir
-
 
     def api(self, path: str, base=QS_API, **kwargs):
         r = requests.get(
@@ -48,7 +46,6 @@ class Exporter:
         r.raise_for_status()
         return r
 
-
     @retryme
     def fetch_device_id(self) -> str:
         r = self.api('/api/v1/user/get')
@@ -56,10 +53,9 @@ class Exporter:
         u = jj.get('user', None)
         if u is None:
             # sometimes it just happens for no apparent reason...
-            self.logger.error('"no user" error: %s', jj)
+            logger.error('"no user" error: %s', jj)
             raise RetryMe
         return u['devices']
-
 
     @retryme
     def fetch_sleeps(self, device_id: str) -> List[str]:
@@ -67,11 +63,10 @@ class Exporter:
         jj = r.json()
         nd = jj.get('navigation_data', None)
         if nd is None:
-            self.logger.error('no "navigation_data", probably means somethign is broken: %s', jj)
+            logger.error('no "navigation_data", probably means somethign is broken: %s', jj)
             raise RetryMe
         # mm, date is returned in funny format, without the year
         return list(sorted(sleep['id'] for sleep in nd))
-
 
     # @backoff.on_exception(backoff.expo, Retry, max_tries=5)
     @retryme
@@ -81,25 +76,21 @@ class Exporter:
         # todo don't remember if this happened often?
         sid = js.get('id', None)
         if sid is None:
-            self.logger.warning(f'Bad json: {js}')
+            logger.warning(f'Bad json: {js}')
             raise RetryMe
 
         # todo use some direct way to check?
         datapoints = js['sleep_epoch_datapoints']
         if datapoints is None:
-            self.logger.warning('Sleep session %s has no datapoints, likely incomplete sleep. Running the export later should resolve this.', sid)
+            logger.warning(f'Sleep session {sid} has no datapoints, likely incomplete sleep. Running the export later should resolve this.')
             raise RetryMe
 
         return js
 
-
     def load_existing(self) -> List[str]:
         return list(sorted(p.stem for p in self.export_dir.glob('*.json')))
 
-
     def update_sleeps(self) -> Iterator[Exception]:
-        logger = get_logger()
-
         device_id = self.fetch_device_id()
         logger.info('Fetching data for device %s', device_id)
 
@@ -129,27 +120,26 @@ class Exporter:
         # IIRC, turds might happen if export happened to run during the sleep.. then you might end up with a partial sleep
         existing = self.load_existing()
         diff = set(existing).difference(set(api_ids))
-        if len(diff) > 5: # todo kinda arbitrary
+        if len(diff) > 5:  # todo kinda arbitrary
             yield RuntimeError(f'Too many differences {diff}')
 
-        from os import rename
         for d in diff:
             logger.info(f'Archiving turd {d}')
             old = self.export_dir / (d + '.json')
             new = self.export_dir / (d + '.json.old')
-            rename(old, new)
-
+            os.rename(old, new)
 
     def run(self) -> None:
         errors = list(self.update_sleeps())
         if len(errors) > 0:
             # todo not sure? more defensive?
-            self.logger.error(f'Had %d errors during the export', len(errors))
-            import sys
+            logger.error(f'Had {len(errors)} errors during the export')
             sys.exit(1)
 
 
 Token = str
+
+
 def login(username: str, password: str) -> Token:
     res = requests.post(
         'https://qs-api.emfit.com/api/v1/login',
@@ -158,8 +148,7 @@ def login(username: str, password: str) -> Token:
     return res.json()['token']
 
 
-def main():
-    setup_logger(get_logger(), level='INFO')
+def main() -> None:
     # todo tenacity logging?
     parser = make_parser()
     args = parser.parse_args()
@@ -179,7 +168,6 @@ def main():
 
 
 def make_parser():
-    from .exporthelpers.export_helper import setup_parser, Parser
     p = Parser('Export/takeout for your personal Emfit QS sleep data')
     setup_parser(
         parser=p,
