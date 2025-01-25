@@ -1,7 +1,10 @@
-#!/usr/bin/env python
+from __future__ import annotations
+
 import re
-from typing import Any, List, Dict
-Stats = Dict[str, Any]
+from pathlib import Path
+from typing import Any
+
+Stats = dict[str, Any]
 
 HTML_PRE = '''
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
@@ -43,7 +46,7 @@ HTML_POST = '''
 def parse_page(html: str) -> Stats:
     if html == '':
         # weird, not sure why it happens sometimes.
-        return dict(error='empty html')
+        return {'error': 'empty html'}
 
     assert html.startswith(HTML_PRE)
     assert html.endswith(HTML_POST)
@@ -58,15 +61,13 @@ def parse_page(html: str) -> Stats:
 
     hr = None if hrs == ' ---'  else float(hrs.strip())
     rr = None if rrs == ' --.-' else float(rrs.strip())
-    return dict(
-        hr=hr,
-        rr=rr,
-    )
+    return {
+        'hr': hr,
+        'rr': rr,
+    }
 
 
-
-from pathlib import Path
-def process(d: Path):
+def process(d: Path) -> None:
     for x in sorted(d.glob('*.htm')):
         html = x.read_text()
         try:

@@ -1,13 +1,16 @@
-#!/usr/bin/env python3
-# Captures dvmstatus Emfit page
-# TODO: see  https://gist.github.com/karlicoss/3361f6a239048a451daa2a02982ee180#dvmstatushtm
-# for actual parsing
-from datetime import datetime
-from pathlib import Path
-import sys
+from __future__ import annotations
+
+"""
+Captures dvmstatus Emfit page
+NOTE: see  https://gist.github.com/karlicoss/3361f6a239048a451daa2a02982ee180#dvmstatushtm
+for actual parsing
+"""
 import sqlite3
+import sys
 import time
 import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
 
 import click
 
@@ -28,7 +31,7 @@ def capture(*, ip: str, to: Path) -> None:
         # todo shold I use asyncio maybe?
         while True:
             data = grab(ip=ip)
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(tz=timezone.utc).isoformat()
             if total % 60 == 0:
                 # log & commit every minute
                 db.commit()
@@ -41,7 +44,6 @@ def capture(*, ip: str, to: Path) -> None:
 
 ### copy pasted from promnesia
 import subprocess
-from typing import List
 
 SYSTEMD_TEMPLATE = '''
 [Unit]
@@ -62,7 +64,7 @@ def systemd(*args, method=subprocess.check_call) -> None:
     ])
 
 
-def _install_systemd(*, name: str, out: Path, launcher: str, largs: List[str]) -> None:
+def _install_systemd(*, name: str, out: Path, launcher: str, largs: list[str]) -> None:
     unit_name = name
 
     import shlex
@@ -95,7 +97,7 @@ def main(*, ip: str, to: Path, install_systemd: bool) -> None:
         out = Path(f'~/.config/systemd/user/{name}.service').expanduser()
         _install_systemd(
             name=name,
-            out=out, 
+            out=out,
             launcher=str(Path(__file__).absolute()),
             largs=['--ip', ip, '--to', str(to)],
         )
