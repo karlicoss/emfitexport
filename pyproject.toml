@@ -3,24 +3,24 @@
 dynamic = ["version"]  # version is managed by setuptools_scm
 name = "emfitexport"
 dependencies = [
-    "requests",
-    "tenacity",  # for retrying
+    "click",  # for dvmstatus
 ]
-# TODO maybe split out DAL deps and export deps? might be nice
+requires-python = ">=3.9"
 
 ## these need to be set if you're planning to upload to pypi
-# description = "TODO"
-# license = {file = "LICENSE"}
-# authors = [
-#     {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
-# ]
-# maintainers = [
-#     {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
-# ]
-#
-# [project.urls]
-# Homepage = "https://github.com/karlicoss/pymplate"
+description = "Backup and extract your Emfit QS data"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
+]
+maintainers = [
+    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
+]
+
+[project.urls]
+Homepage = "https://github.com/karlicoss/emfitexport"
 ##
+
 
 [project.optional-dependencies]
 dal = []
@@ -32,17 +32,18 @@ optional = [
     "orjson",  # faster json processing
     "colorlog",
     "ijson",  # faster iterative json processing
-    "click",  # for dvmstatus
-    "numpy",  # for fake data generation
 ]
+fakedata = ["numpy"]
+
+
+[dependency-groups]
 testing = [
     "pytest",
     "ruff",
     "mypy",
     "lxml",  # for mypy html coverage
 
-    "click",  # ugh, test discovery tries to import dvmstatus
-    "numpy",
+    "types-requests",
 ]
 
 
@@ -53,3 +54,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 version_scheme = "python-simplified-semver"
 local_scheme = "dirty-tag"
+
+# workaround for error during uv publishing
+# see https://github.com/astral-sh/uv/issues/9513#issuecomment-2519527822
+[tool.setuptools]
+license-files = []

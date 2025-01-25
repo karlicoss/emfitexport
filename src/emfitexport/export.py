@@ -1,17 +1,21 @@
-#!/usr/bin/env python3
+from __future__ import annotations
+
 import json
 import logging
-import os
-from pathlib import Path
 import sys
-from typing import Iterator, List
+from collections.abc import Iterator
+from pathlib import Path
 
 import requests
-from tenacity import retry, retry_if_exception_type, wait_exponential, stop_after_attempt
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
-from .exporthelpers.export_helper import Json, setup_parser, Parser
+from .exporthelpers.export_helper import Json, Parser, setup_parser
 from .exporthelpers.logging_helper import make_logger
-
 
 logger = make_logger(__name__)
 
@@ -58,7 +62,7 @@ class Exporter:
         return u['devices']
 
     @retryme
-    def fetch_sleeps(self, device_id: str) -> List[str]:
+    def fetch_sleeps(self, device_id: str) -> list[str]:
         r = self.api(f'/api/v1/presence/{device_id}/latest')
         jj = r.json()
         nd = jj.get('navigation_data', None)
@@ -66,7 +70,7 @@ class Exporter:
             logger.error('no "navigation_data", probably means somethign is broken: %s', jj)
             raise RetryMe
         # mm, date is returned in funny format, without the year
-        return list(sorted(sleep['id'] for sleep in nd))
+        return sorted(sleep['id'] for sleep in nd)
 
     # @backoff.on_exception(backoff.expo, Retry, max_tries=5)
     @retryme
@@ -87,8 +91,8 @@ class Exporter:
 
         return js
 
-    def load_existing(self) -> List[str]:
-        return list(sorted(p.stem for p in self.export_dir.glob('*.json')))
+    def load_existing(self) -> list[str]:
+        return sorted(p.stem for p in self.export_dir.glob('*.json'))
 
     def update_sleeps(self) -> Iterator[Exception]:
         device_id = self.fetch_device_id()
@@ -127,7 +131,7 @@ class Exporter:
             logger.info(f'Archiving turd {d}')
             old = self.export_dir / (d + '.json')
             new = self.export_dir / (d + '.json.old')
-            os.rename(old, new)
+            old.rename(new)
 
     def run(self) -> None:
         errors = list(self.update_sleeps())
@@ -143,7 +147,7 @@ Token = str
 def login(username: str, password: str) -> Token:
     res = requests.post(
         'https://qs-api.emfit.com/api/v1/login',
-        data=dict(username=username, password=password),
+        data={'username': username, 'password': password},
     )
     return res.json()['token']
 

@@ -1,15 +1,17 @@
-#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+from collections.abc import Iterator
 from concurrent.futures import Executor
 from dataclasses import dataclass
-from datetime import date as datetime_date, datetime, timedelta, timezone
-import json
+from datetime import date as datetime_date
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterator, List, Optional, Tuple
+from typing import Optional
 
-from .exporthelpers.dal_helper import Res, Json, datetime_aware
+from .exporthelpers.dal_helper import Json, Res, datetime_aware
 from .exporthelpers.logging_helper import make_logger
 from .utils import DummyFuture
-
 
 logger = make_logger(__name__)
 log = logger  # legacy name, was used at HPI at some point, so keeping for backwards compat
@@ -73,13 +75,13 @@ class EmfitParse:
         return fromts(self.raw['time_end'])
 
     @property
-    def epochs(self) -> List[Tuple[int, int]]:
+    def epochs(self) -> list[tuple[int, int]]:
         # pairs of timestamp/epoch 'id'
         # these seems to be utc (can double check last epoch against to_utc field in export)
         return self.raw['sleep_epoch_datapoints']
 
     @property
-    def epoch_series(self) -> Tuple[List[int], List[int]]:
+    def epoch_series(self) -> tuple[list[int], list[int]]:
         tss = []
         eps = []
         for (ts, e) in self.epochs:
@@ -122,7 +124,7 @@ class EmfitParse:
     def strip_awakes(self):
         ff = None
         ll = None
-        for i, [ts, e] in enumerate(self.epochs):
+        for i, [_ts, e] in enumerate(self.epochs):
             if e != AWAKE:
                 ff = i
                 break
@@ -149,7 +151,7 @@ class EmfitParse:
     #     # TODO get start and end in one go?
 
     #     for p in self.iter_points():
-    #         p.ts 
+    #         p.ts
 
 
     #     INT = 30
@@ -161,7 +163,7 @@ class EmfitParse:
     #         if tt not in present:
     #             missing += 1
     #     # TODO get hr instead!
-    #     import ipdb; ipdb.set_trace() 
+    #     import ipdb; ipdb.set_trace()
     #     return missing
 
 
@@ -274,7 +276,7 @@ class Emfit:
         return self.hrv_morning - self.hrv_evening
 
     @classmethod
-    def from_json(cls, j: Json) -> 'Emfit':
+    def from_json(cls, j: Json) -> Emfit:
         sid = j['id']
         em = EmfitParse(sid, raw=j)
 
@@ -475,7 +477,7 @@ class FakeData:
         return j
 
     def fill(self, path: Path, *, count: int) -> None:
-        for i in range(count):
+        for _i in range(count):
             j = self.generate()
             (path / f'{j["id"]}.json').write_text(json.dumps(j))
 
