@@ -58,32 +58,43 @@ Type=simple
 Restart=always
 '''
 
+
 def systemd(*args, method=subprocess.check_call) -> None:
-    method([
-        'systemctl', '--no-pager', '--user', *args,
-    ])
+    method(
+        [
+            'systemctl',
+            '--no-pager',
+            '--user',
+            *args,
+        ]
+    )
 
 
 def _install_systemd(*, name: str, out: Path, launcher: str, largs: list[str]) -> None:
     unit_name = name
 
     import shlex
+
     extra_args = ' '.join(shlex.quote(str(a)) for a in largs)
 
-    out.write_text(SYSTEMD_TEMPLATE.format(
-        launcher=launcher,
-        extra_args=extra_args,
-    ))
+    out.write_text(
+        SYSTEMD_TEMPLATE.format(
+            launcher=launcher,
+            extra_args=extra_args,
+        )
+    )
 
     try:
-        systemd('stop' , unit_name, method=subprocess.run) # ignore errors here if it wasn't running in the first place
+        systemd('stop', unit_name, method=subprocess.run)  # ignore errors here if it wasn't running in the first place
         systemd('daemon-reload')
         systemd('enable', unit_name)
-        systemd('start' , unit_name)
+        systemd('start', unit_name)
         systemd('status', unit_name)
     except Exception as e:
         print(f"Something has gone wrong... you might want to use 'journalctl --user -u {unit_name}' to investigate", file=sys.stderr)
         raise e
+
+
 ###
 
 

@@ -84,14 +84,14 @@ class EmfitParse:
     def epoch_series(self) -> tuple[list[int], list[int]]:
         tss = []
         eps = []
-        for (ts, e) in self.epochs:
+        for ts, e in self.epochs:
             tss.append(ts)
             eps.append(e)
         return tss, eps
 
     @property
     def sleep_start(self) -> datetime_aware:
-        for (ts, e) in self.epochs:
+        for ts, e in self.epochs:
             if e == AWAKE:
                 continue
             return fromts(ts)
@@ -99,7 +99,7 @@ class EmfitParse:
 
     @property
     def sleep_end(self) -> datetime_aware:
-        for (ts, e) in reversed(self.epochs):
+        for ts, e in reversed(self.epochs):
             if e == AWAKE:
                 continue
             return fromts(ts)
@@ -153,7 +153,6 @@ class EmfitParse:
     #     for p in self.iter_points():
     #         p.ts
 
-
     #     INT = 30
 
     #     missing = 0
@@ -165,7 +164,6 @@ class EmfitParse:
     #     # TODO get hr instead!
     #     import ipdb; ipdb.set_trace()
     #     return missing
-
 
     #     st = st[0][0]
     #     INT = 30
@@ -387,14 +385,12 @@ class FakeData:
 
             sleep_duration = (sleep_end - sleep_start) / D(seconds=1)
 
-            count = int((sleep_end - sleep_start) / self.frequency)
+            _count = int((sleep_end - sleep_start) / self.frequency)
 
             # todo decide on periods when woken up first (sort of poisson distribution?), then fit the rest
             # todo instead, arange and assume sample every 5 secs or something?
             tss = np.arange(T(bed_start), T(bed_end), self.frequency.total_seconds())
 
-            arange = np.arange
-            # fmt: off
             return {
                 "bed_exit_count"            : todo,
                 "bed_exit_duration"         : todo,
@@ -463,8 +459,7 @@ class FakeData:
                 "to_utc"                    : todo,
                 "tossnturn_count"           : todo,  # todo derive
                 "tossnturn_datapoints"      : todo,
-            }
-            # fmt: on
+            }  # fmt: skip
 
         j = make_sleep()
         # fmt: off

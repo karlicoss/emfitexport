@@ -6,7 +6,8 @@ from typing import Any
 
 Stats = dict[str, Any]
 
-HTML_PRE = '''
+HTML_PRE = (
+    '''
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
@@ -23,7 +24,9 @@ HTML_PRE = '''
 <div id="title"><div class="right"></div><span id="hello">&nbsp;</span></div>
 
 <meta http-equiv="refresh" content="1">
-'''.strip('\n') + '  \n'
+'''.strip('\n')
+    + '  \n'
+)
 
 
 # todo: do not hardcode numbers?
@@ -40,6 +43,7 @@ HTML_POST = '''
 </html>
 '''
 
+
 # TODO oof. should have used
 # https://gist.github.com/harperreed/9d063322eb84e88bc2d0580885011bdd#dvmstatushtm
 # dvmstatus.htm
@@ -50,8 +54,8 @@ def parse_page(html: str) -> Stats:
 
     assert html.startswith(HTML_PRE)
     assert html.endswith(HTML_POST)
-    html = html[len(HTML_PRE): -len(HTML_POST)]
-    html = html.replace('\n', '') # just to simplify
+    html = html[len(HTML_PRE) : -len(HTML_POST)]
+    html = html.replace('\n', '')  # just to simplify
     m = re.fullmatch(RE_MID, html)
     assert m is not None, repr(html)
     g = m.groupdict()
@@ -59,7 +63,7 @@ def parse_page(html: str) -> Stats:
     hrs = g['hr']
     rrs = g['rr']
 
-    hr = None if hrs == ' ---'  else float(hrs.strip())
+    hr = None if hrs == ' ---' else float(hrs.strip())
     rr = None if rrs == ' --.-' else float(rrs.strip())
     return {
         'hr': hr,
