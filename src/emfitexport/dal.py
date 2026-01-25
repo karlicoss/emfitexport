@@ -9,10 +9,11 @@ from datetime import date as datetime_date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .exporthelpers import dal_helper
+from more_itertools import chunked
+
+from .exporthelpers import dal_helper, logging_helper
 from .exporthelpers.dal_helper import Json, Res, datetime_aware, pathify
 from .exporthelpers.logging_helper import make_logger
-from .utils import DummyFuture
 
 logger = make_logger(__name__)
 
@@ -282,17 +283,25 @@ class Emfit:
         return cls(**{k: getattr(em, k) for k in Emfit.__annotations__})
 
 
-def _process_one(json_path: Path, i: int, total: int) -> Res[Emfit]:
-    logger.info(f'processing {json_path} ({i}/{total})')
+def _process_path(path: Path, log_msg: str) -> Res[Emfit]:
+    """
+    Helper function to process one file -- needs to be on the top level in case ProcessPoolExecutor is used.
+    """
+    logger.info(log_msg)
     try:
-        j = json.loads(json_path.read_text())
+        j = json.loads(path.read_text())
         return Emfit.from_json(j)
     except Exception as ex:
+        ex.add_note(f'^ while processing {path}')
         return ex
 
 
 class DAL:
-    def __init__(self, export_path: Path | Sequence[Path | str], *, cpu_pool: Executor | None = None) -> None:
+    def __init__(self, export_path: Path | Sequence[Path | str], *, executor: Executor | None = None) -> None:
+        """
+        executor: optional Executor (e.g. ThreadPoolExecutor) to use for CPU-bound tasks (e.g. parsing json).
+        """
+
         # TODO maybe rename to 'sources' (while preserving backwards compatibility?)
         if isinstance(export_path, Path):
             # legacy behaviour -- initially DAL was just taking export_path: Path here
@@ -307,32 +316,37 @@ class DAL:
             # - in case they are compressed
             self.sources = list(map(pathify, export_path))
 
-        self.cpu_pool = cpu_pool
+        self.executor = executor
+        self.enlighten = logging_helper.get_enlighten()
 
     def sleeps(self) -> Iterator[Res[Emfit]]:
-        paths = self.sources
+        progress_bar = self.enlighten.counter(total=len(self.sources), desc=f'{__name__}', unit='files')
 
-        cpu_pool = self.cpu_pool
+        executor = self.executor
+        _map = map if executor is None else executor.map
+        workers = None if executor is None else getattr(executor, '_max_workers')
 
-        futures = []
-        for i, f in enumerate(paths):
-            if cpu_pool is not None:
-                future = cpu_pool.submit(_process_one, f, i, len(paths))
-            else:
-                future = DummyFuture(_process_one, f, i, len(paths))
-            futures.append(future)
+        total = len(self.sources)
+        width = len(str(total))
 
-        for fut in futures:
-            fres = fut.result()
-            yield fres
+        # Batch input data by the amount of available workers.
+        # This is to make sure that in case of slow consumer, results don't build up and we won't run out of memory.
+        for chunk in chunked(enumerate(self.sources), n=workers):
+            results = _map(
+                _process_path,
+                *zip(*((path, f'processing [{idx:>{width}}/{total:>{width}}] {path}') for idx, path in chunk), strict=True),
+            )  # fmt: skip
+            for r in results:
+                progress_bar.update()
+                yield r
 
 
 if not TYPE_CHECKING:
     log = logger  # legacy name, was used at HPI at some point, so keeping for backwards compat
 
     # legacy function, used to be called from HPI. keeping for bwd compatibility
-    def sleeps(path: Path, *, cpu_pool: Executor | None = None) -> Iterator[Res[Emfit]]:
-        return DAL(export_path=path, cpu_pool=cpu_pool).sleeps()
+    def sleeps(path: Path, *, executor: Executor | None = None) -> Iterator[Res[Emfit]]:
+        return DAL(export_path=path, executor=executor).sleeps()
 
 
 def demo(dal: DAL) -> None:
