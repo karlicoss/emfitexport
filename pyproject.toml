@@ -20,7 +20,9 @@ Homepage = "https://github.com/karlicoss/emfitexport"
 
 
 [project.optional-dependencies]
-dal = []
+dal = [
+    "more-itertools",
+]
 export = [
     "requests",
     "tenacity",  # for retrying
