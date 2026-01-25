@@ -4,17 +4,16 @@ import json
 from collections.abc import Iterator
 from concurrent.futures import Executor
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta, timezone
 from datetime import date as datetime_date
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from .exporthelpers.dal_helper import Json, Res, datetime_aware
 from .exporthelpers.logging_helper import make_logger
 from .utils import DummyFuture
 
 logger = make_logger(__name__)
-log = logger  # legacy name, was used at HPI at some point, so keeping for backwards compat
 
 
 def _hhmm(minutes) -> str:
@@ -25,7 +24,7 @@ def _hhmm(minutes) -> str:
 # todo hmm, emfit has time_user_gmt_offset?? how it is determined?
 # seems that datapoints are in UTC though
 def fromts(ts) -> datetime_aware:
-    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    dt = datetime.fromtimestamp(ts, tz=UTC)
     return dt
 
 
@@ -129,7 +128,7 @@ class EmfitParse:
                 ff = i
                 break
         for i in range(len(self.epochs) - 1, -1, -1):
-            [ts, e] = self.epochs[i]
+            [_ts, e] = self.epochs[i]
             if e != AWAKE:
                 ll = i
                 break
@@ -182,7 +181,7 @@ class EmfitParse:
 
     def iter_points(self):
         for ll in self.raw['measured_datapoints']:
-            [ts, pulse, br, activity] = ll
+            [ts, pulse, _br, _activity] = ll
             # TODO what the fuck is whaat?? It can't be HRV, it's about 500 ms on average
             # act in csv.. so it must be activity? wonder how is it measured.
             # but I guess makes sense. yeah,  "measured_activity_avg": 595, about that
@@ -208,7 +207,7 @@ class EmfitParse:
         tss = []
         res = []
         for ll in self.raw['hrv_rmssd_datapoints']:
-            [ts, rmssd, _, _, almost_always_zero, _] = ll
+            [ts, rmssd, _, _, _almost_always_zero, _] = ll
             # timestamp,rmssd,tp,lfn,hfn,r_hrv
             # TP is total_power??
             # erm. looks like there is a discrepancy between csv and json data.
@@ -227,7 +226,7 @@ class EmfitParse:
 
     @property
     def sleep_hr_coverage(self) -> float:
-        tss, hrs = self.sleep_hr
+        _tss, hrs = self.sleep_hr
         covered = len([h for h in hrs if h is not None])
         expected = len(hrs)
         return covered / expected * 100
@@ -292,12 +291,13 @@ def _process_one(json_path: Path, i: int, total: int) -> Res[Emfit]:
 
 
 class DAL:
-    def __init__(self, export_path: Path, *, cpu_pool: Optional[Executor] = None) -> None:
+    def __init__(self, export_path: Path, *, cpu_pool: Executor | None = None) -> None:
         self.export_path = export_path
         self.cpu_pool = cpu_pool
 
     def sleeps(self) -> Iterator[Res[Emfit]]:
-        assert self.export_path.exists(), self.export_path  # ugh glob will just return empty sequence if dir doesn't exist
+        # ugh glob will just return empty sequence if dir doesn't exist
+        assert self.export_path.exists(), self.export_path
 
         # NOTE: ids seems to be consistent with ascending date order
         paths = sorted(self.export_path.glob('*.json'))
@@ -318,8 +318,12 @@ class DAL:
 
 
 # legacy function, used to be called from HPI. keeping for bwd compatibility
-def sleeps(path: Path, *, cpu_pool: Optional[Executor] = None) -> Iterator[Res[Emfit]]:
+def sleeps(path: Path, *, cpu_pool: Executor | None = None) -> Iterator[Res[Emfit]]:
     return DAL(export_path=path, cpu_pool=cpu_pool).sleeps()
+
+
+if not TYPE_CHECKING:
+    log = logger  # legacy name, was used at HPI at some point, so keeping for backwards compat
 
 
 ### end of main DAL, rest is test & supplementary code
@@ -356,7 +360,7 @@ class FakeData:
         import numpy as np
 
         # todo ok, mimesize seems pretty useless for now?
-        # from mimesis.schema import Field, Schema # type: ignore
+        # from mimesis.schema import Field, Schema
         # mark fields I didn't bother filling for now
         # F = Field('en')
         todo = None

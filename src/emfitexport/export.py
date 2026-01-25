@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -86,7 +85,9 @@ class Exporter:
         # todo use some direct way to check?
         datapoints = js['sleep_epoch_datapoints']
         if datapoints is None:
-            logger.warning(f'Sleep session {sid} has no datapoints, likely incomplete sleep. Running the export later should resolve this.')
+            logger.warning(
+                f'Sleep session {sid} has no datapoints, likely incomplete sleep. Running the export later should resolve this.'
+            )
             raise RetryMe
 
         return js
@@ -112,8 +113,8 @@ class Exporter:
             try:
                 js = self.fetch_sleep(device_id, sleep_id=sid)
             except Exception as e:
-                logging.error('error while fetching sleep %s', sid)
-                logging.exception(e)
+                logger.error('error while fetching sleep %s', sid)
+                logger.exception(e)
                 yield e
                 continue
 

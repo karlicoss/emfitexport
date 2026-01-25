@@ -9,7 +9,7 @@ import sqlite3
 import sys
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -26,12 +26,14 @@ def grab(ip: str) -> str:
 def capture(*, ip: str, to: Path) -> None:
     with sqlite3.connect(str(to)) as db:
         # todo not sure if need id?
-        db.execute('CREATE TABLE IF NOT EXISTS data (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, payload TEXT)')
+        db.execute(
+            'CREATE TABLE IF NOT EXISTS data (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, payload TEXT)'
+        )
         total = 0
         # todo shold I use asyncio maybe?
         while True:
             data = grab(ip=ip)
-            now = datetime.now(tz=timezone.utc).isoformat()
+            now = datetime.now(tz=UTC).isoformat()
             if total % 60 == 0:
                 # log & commit every minute
                 db.commit()
@@ -91,7 +93,10 @@ def _install_systemd(*, name: str, out: Path, launcher: str, largs: list[str]) -
         systemd('start', unit_name)
         systemd('status', unit_name)
     except Exception as e:
-        print(f"Something has gone wrong... you might want to use 'journalctl --user -u {unit_name}' to investigate", file=sys.stderr)
+        print(
+            f"Something has gone wrong... you might want to use 'journalctl --user -u {unit_name}' to investigate",
+            file=sys.stderr,
+        )
         raise e
 
 

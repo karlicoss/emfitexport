@@ -3,21 +3,18 @@
 dynamic = ["version"]  # version is managed by build backend
 name = "emfitexport"
 dependencies = [
+    "emfitexport[export,dal]",  # TODO backwards compatibility -- remove later?
     "click",  # for dvmstatus
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 
-## these need to be set if you're planning to upload to pypi
-description = "Backup and extract your Emfit QS data"
-license = {file = "LICENSE"}
-authors = [
-    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
-]
-maintainers = [
-    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
-]
+## these are only useful for pypi
+description = "Export your personal Emfit QS sleep data."  # shows on project page/in search
+license     = {file = "LICENSE"}
+authors     = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
+maintainers = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
 
-[project.urls]
+[project.urls]  # pypi will fetch some github stats/link, so somewhat useful
 Homepage = "https://github.com/karlicoss/emfitexport"
 ##
 
@@ -33,18 +30,29 @@ optional = [
     "colorlog",
     "ijson",  # faster iterative json processing
 ]
-fakedata = ["numpy"]
+fakedata = [
+    "numpy",
+]
 
 
 [dependency-groups]
+# TODO: not sure, on the one hand could just use 'standard' dev dependency group
+# On the other hand, it's a bit annoying that it's always included by default? 
+# To make sure it's not included, need to use `uv run --exact --no-default-groups ...`
 testing = [
-    "pytest",
+    "pytest>=9",  # need version 9 for proper namespace package support
     "ruff",
+
+    "emfitexport[dal,export,optional,fakedata]",
+]
+typecheck = [
     "mypy",
     "lxml", # for mypy html coverage
-    "ty>=0.0.1a15",
+    "ty>=0.0.13",
 
     "types-requests",
+
+    { include-group = "testing" },
 ]
 
 
@@ -62,4 +70,3 @@ source = "vcs"
 [tool.hatch.version.raw-options]
 version_scheme = "python-simplified-semver"
 local_scheme = "dirty-tag"
-
