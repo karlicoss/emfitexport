@@ -5,7 +5,10 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
+import hpikit.cli.export as cli
 import requests
+from hpikit.json import Json
+from kloggy import get_logger
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -13,10 +16,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from .exporthelpers.export_helper import Json, Parser, setup_parser
-from .exporthelpers.logging_helper import make_logger
-
-logger = make_logger(__name__)
+logger = get_logger(__name__)
 
 
 # ugh. it's a mess https://github.com/samuelmr/emfit-qs/pull/1/files
@@ -158,7 +158,7 @@ def main() -> None:
     parser = make_parser()
     args = parser.parse_args()
 
-    params = args.params
+    params = cli.get_params(parser, args)
 
     token = login(
         username=params['username'],
@@ -173,9 +173,8 @@ def main() -> None:
 
 
 def make_parser():
-    p = Parser('Export/takeout for your personal Emfit QS sleep data')
-    setup_parser(
-        parser=p,
+    p = cli.make_parser(
+        description='Export/takeout for your personal Emfit QS sleep data',
         params=['username', 'password'],
     )
     p.add_argument('--export-dir', type=Path, required=True, help='Output directory for JSON sleep sessions')
