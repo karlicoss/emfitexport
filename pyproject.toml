@@ -3,14 +3,19 @@
 dynamic = ["version"]  # version is managed by build backend
 name = "emfitexport"
 dependencies = [
-    "emfitexport[export,dal]",  # TODO backwards compatibility -- remove later?
+    "hpikit",
+    "kloggy",
     "click",  # for dvmstatus
+    ## TODO backwards compatibility -- remove later?
+    # need to add explicit [dal] depenceny in HPI?
+    "emfitexport[export,dal]",
+    ##
 ]
 requires-python = ">=3.12"
 
 ## these are only useful for pypi
 description = "Export your personal Emfit QS sleep data."  # shows on project page/in search
-readme      = {file = "README.org", content-type = "text/plain"}
+readme      = "README.md"
 license     = {file = "LICENSE"}
 authors     = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
 maintainers = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
@@ -22,16 +27,15 @@ Homepage = "https://github.com/karlicoss/emfitexport"
 
 [project.optional-dependencies]
 dal = [
-    "more-itertools",
+    "koncurrent",
 ]
 export = [
     "requests",
     "tenacity",  # for retrying
 ]
 optional = [
-    "orjson",  # faster json processing
-    "colorlog",
-    "ijson",  # faster iterative json processing
+    "hpikit[optional]", # faster JSON parsing and transparent compression
+    "kloggy[enlighten]",  # progress bars, shown when KLOGGY_PROGRESS is set, e.g. KLOGGY_PROGRESS=enlighten
 ]
 fakedata = [
     "numpy",
@@ -55,6 +59,11 @@ typecheck = [
     "types-requests",
 
     { include-group = "testing" },
+]
+quarto = [
+    "quarto-cli",
+
+    "emfitexport[dal,export,optional]",
 ]
 
 
@@ -376,6 +385,19 @@ commands = [
     [
         "{env_python}", "-m", "ty",
         "check",
+        { replace = "posargs", default = [], extend = true },
+    ],
+]
+
+
+[tool.tox.env.quarto]
+dependency_groups = ["quarto"]
+# Quarto relies on same-directory imports here, so unset the base environment value.
+set_env.PYTHONSAFEPATH = ""
+commands = [
+    [
+        "quarto", "render",
+        "README.qmd",
         { replace = "posargs", default = [], extend = true },
     ],
 ]

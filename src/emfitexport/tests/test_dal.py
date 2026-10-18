@@ -1,11 +1,12 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
+from hpikit.json import Json
 
 from ..dal import AWAKE, DAL, Emfit
-from ..exporthelpers.dal_helper import Json
 
 
 class FakeData:
@@ -166,3 +167,23 @@ def test(tmp_path: Path) -> None:
     for r in res:
         assert isinstance(r, Emfit)
     assert len(res) == 5
+
+
+def test_sleeps_continue_after_bad_file(tmp_path: Path) -> None:
+    FakeData().fill(tmp_path, count=2)
+    first, last = sorted(tmp_path.glob('*.json'))
+    broken = tmp_path / 'broken.json'
+    broken.write_text('{}')
+
+    [before, error, after] = DAL([first, broken, last]).sleeps()
+    assert isinstance(before, Emfit)
+    assert isinstance(error, Exception)
+    assert isinstance(after, Emfit)
+
+
+def test_hpi_backwards_compatibility() -> None:
+    """
+    Passing executor= to the constructor still works.
+    """
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        DAL([], executor=executor)

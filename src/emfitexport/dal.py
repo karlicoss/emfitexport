@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Iterator, Sequence
 from concurrent.futures import Executor
 from dataclasses import dataclass
@@ -9,13 +8,15 @@ from datetime import date as datetime_date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from more_itertools import chunked
+import hpikit.cli.dal as cli
+import koncurrent
+from hpikit.datetime import AwareDateTime, aware
+from hpikit.json import Json, loads
+from hpikit.paths import as_paths
+from kloggy import get_logger
+from kloggy.progress import progress
 
-from .exporthelpers import dal_helper, logging_helper
-from .exporthelpers.dal_helper import Json, Res, datetime_aware, pathify
-from .exporthelpers.logging_helper import make_logger
-
-logger = make_logger(__name__)
+logger = get_logger(__name__)
 
 
 def _hhmm(minutes) -> str:
@@ -25,9 +26,9 @@ def _hhmm(minutes) -> str:
 # def important on the sleep plot to have consistent local time
 # todo hmm, emfit has time_user_gmt_offset?? how it is determined?
 # seems that datapoints are in UTC though
-def fromts(ts) -> datetime_aware:
+def fromts(ts) -> AwareDateTime:
     dt = datetime.fromtimestamp(ts, tz=UTC)
-    return dt
+    return aware(dt)
 
 
 # todo tossnturn_count, tossnturn_datapoints (array of timestamps)
@@ -62,14 +63,14 @@ class EmfitParse:
         return self.raw['hrv_rmssd_evening']
 
     @property
-    def start(self) -> datetime_aware:
+    def start(self) -> AwareDateTime:
         """
         Bed enter time, not necessarily sleep start
         """
         return fromts(self.raw['time_start'])
 
     @property
-    def end(self) -> datetime_aware:
+    def end(self) -> AwareDateTime:
         """
         Bed exit time, not necessarily sleep end
         """
@@ -91,7 +92,7 @@ class EmfitParse:
         return tss, eps
 
     @property
-    def sleep_start(self) -> datetime_aware:
+    def sleep_start(self) -> AwareDateTime:
         for ts, e in self.epochs:
             if e == AWAKE:
                 continue
@@ -99,7 +100,7 @@ class EmfitParse:
         raise RuntimeError
 
     @property
-    def sleep_end(self) -> datetime_aware:
+    def sleep_end(self) -> AwareDateTime:
         for ts, e in reversed(self.epochs):
             if e == AWAKE:
                 continue
@@ -245,10 +246,10 @@ class Emfit:
     sid: Sid
     hrv_morning: float
     hrv_evening: float
-    start: datetime_aware
-    end: datetime_aware
-    sleep_start: datetime_aware
-    sleep_end: datetime_aware
+    start: AwareDateTime
+    end: AwareDateTime
+    sleep_start: AwareDateTime
+    sleep_end: AwareDateTime
     sleep_hr_coverage: float
     measured_hr_avg: float
     sleep_minutes_emfit: int
@@ -283,25 +284,19 @@ class Emfit:
         return cls(**{k: getattr(em, k) for k in Emfit.__annotations__})
 
 
-def _process_path(path: Path, log_msg: str) -> Res[Emfit]:
+def _process_path(path: Path) -> Emfit:
     """
     Helper function to process one file -- needs to be on the top level in case ProcessPoolExecutor is used.
     """
-    logger.info(log_msg)
-    try:
-        j = json.loads(path.read_text())
-        return Emfit.from_json(j)
-    except Exception as ex:
-        ex.add_note(f'^ while processing {path}')
-        return ex
+    j = loads(path.read_bytes())
+    return Emfit.from_json(j)
 
 
 class DAL:
     def __init__(self, export_path: Path | Sequence[Path | str], *, executor: Executor | None = None) -> None:
         """
-        executor: optional Executor (e.g. ThreadPoolExecutor) to use for CPU-bound tasks (e.g. parsing json).
+        executor: same as setting the executor attribute later, kept for backwards compatibility.
         """
-
         # TODO maybe rename to 'sources' (while preserving backwards compatibility?)
         if isinstance(export_path, Path):
             # legacy behaviour -- initially DAL was just taking export_path: Path here
@@ -309,43 +304,36 @@ class DAL:
             assert export_path.exists(), export_path
 
             # NOTE: ids seems to be consistent with ascending date order
-            self.sources = sorted(export_path.glob('*.json'))
+            self.sources = tuple(sorted(export_path.glob('*.json')))
         else:
             # it's better to allow passing input sources directly
             # - in case user wants to filter some out first or whatever
             # - in case they are compressed
-            self.sources = list(map(pathify, export_path))
+            self.sources = as_paths(export_path)
 
-        self.executor = executor
-        self.enlighten = logging_helper.get_enlighten()
+        # where to parse the files -- None means koncurrent's shared default, serial unless configured otherwise
+        # set these before iterating to override, e.g. dal.executor = ThreadPoolExecutor(4)
+        self.executor: Executor | None = executor
+        self.buffersize: int | None = None  # None: twice the executor's number of workers, or 1 when running serially
 
-    def sleeps(self) -> Iterator[Res[Emfit]]:
-        progress_bar = self.enlighten.counter(total=len(self.sources), desc=f'{__name__}', unit='files')
-
-        executor = self.executor
-        _map = map if executor is None else executor.map
-        workers = None if executor is None else getattr(executor, '_max_workers')
-
-        total = len(self.sources)
-        width = len(str(total))
-
-        # Batch input data by the amount of available workers.
-        # This is to make sure that in case of slow consumer, results don't build up and we won't run out of memory.
-        for chunk in chunked(enumerate(self.sources), n=workers):
-            results = _map(
-                _process_path,
-                *zip(*((path, f'processing [{idx:>{width}}/{total:>{width}}] {path}') for idx, path in chunk), strict=True),
-            )  # fmt: skip
-            for r in results:
-                progress_bar.update()
-                yield r
+    def sleeps(self) -> Iterator[Emfit | Exception]:
+        with koncurrent.map_results(
+            _process_path, self.sources, executor=self.executor, buffersize=self.buffersize
+        ) as results:
+            # Track results as they are consumed, so queued executor work doesn't advance the bar prematurely.
+            # Log each path before waiting for its result, including before parsing in serial mode.
+            files = progress(self.sources, logger=logger, unit='files')
+            for path, res in zip(files, results, strict=True):
+                if isinstance(res, Exception):
+                    res.add_note(f'^ while processing {path}')
+                yield res
 
 
 if not TYPE_CHECKING:
     log = logger  # legacy name, was used at HPI at some point, so keeping for backwards compat
 
     # legacy function, used to be called from HPI. keeping for bwd compatibility
-    def sleeps(path: Path, *, executor: Executor | None = None) -> Iterator[Res[Emfit]]:
+    def sleeps(path: Path, *, executor: Executor | None = None) -> Iterator[Emfit | Exception]:
         return DAL(export_path=path, executor=executor).sleeps()
 
 
@@ -355,4 +343,4 @@ def demo(dal: DAL) -> None:
 
 
 if __name__ == '__main__':
-    dal_helper.main(DAL=DAL, demo=demo)
+    cli.main(DAL=DAL, demo=demo)
